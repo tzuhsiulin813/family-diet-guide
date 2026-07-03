@@ -19,6 +19,10 @@ const photoPreview = document.querySelector("#photoPreview");
 const pantryText = document.querySelector("#pantryText");
 const addPantryButton = document.querySelector("#addPantryButton");
 const voiceButton = document.querySelector("#voiceButton");
+const APP_VERSION = "v1.0";
+const APP_UPDATED_AT = "2026-07-03";
+const MEMBER_STORAGE_KEY = "familyDietMembersV2";
+const PREFERENCES_STORAGE_KEY = "familyDietPreferencesV2";
 const PANTRY_STORAGE_KEY = "familyDietPantryV2";
 
 function loadLocalData(key, fallback) {
@@ -157,13 +161,17 @@ function createDefaultPantry() {
 
 const state = {
   activeMemberId: "member-1",
-  members: createDefaultMembers(),
-  preferences: { ...defaultPreferences },
+  members: loadLocalData(MEMBER_STORAGE_KEY, createDefaultMembers()),
+  preferences: { ...defaultPreferences, ...loadLocalData(PREFERENCES_STORAGE_KEY, {}) },
   pantry: loadLocalData(PANTRY_STORAGE_KEY, createDefaultPantry()),
   importHistory: ["目前沒有預設庫存，請用文字、語音或照片建立家中食材"],
   diary: loadLocalData("familyDietDiary", []),
   aiAdvice: loadLocalData("familyDietAiAdvice", []),
 };
+
+if (!state.members.some((member) => member.id === state.activeMemberId)) {
+  state.activeMemberId = state.members[0]?.id || "member-1";
+}
 
 const mealBank = {
   balanced: [
@@ -331,6 +339,7 @@ const cuisineCopy = {
 
 const pantryModeCopy = {
   use: "優先消耗庫存",
+  empty: "無庫存模式",
   reference: "只參考庫存",
   ignore: "不考慮庫存",
 };
@@ -710,6 +719,21 @@ function mealHasRestrictedTerm(meal, preferences = state.preferences) {
   return isRestrictedIngredient(`${meal.title} ${meal.detail} ${meal.ingredients.join(" ")}`, preferences);
 }
 
+function shouldUsePantry(preferences = state.preferences) {
+  return preferences.pantryMode !== "ignore" && preferences.pantryMode !== "empty";
+}
+
+function stableHash(value) {
+  return String(value)
+    .split("")
+    .reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) % 1000003, 7);
+}
+
+function getMenuSeed(preferences = state.preferences) {
+  const dayKey = new Date().toISOString().slice(0, 10);
+  return stableHash([dayKey, preferences.planAudience, preferences.diet, preferences.cuisineStyle, preferences.meals, preferences.weeklyVariety, preferences.pantryMode].join("|"));
+}
+
 function getSlotKey(slot) {
   if (slot === "早餐") return "breakfast";
   if (slot === "午餐" || slot === "第一餐") return "lunch";
@@ -724,6 +748,7 @@ function getCuisineStyleForMeal(preferences, index) {
 }
 
 function applyCuisineStyle(meal, preferences, index) {
+  if (meal.keepCuisine) return meal;
   const style = getCuisineStyleForMeal(preferences, index);
   const template = cuisineMealBank[style]?.[getSlotKey(meal.slot)];
   if (!template) return { ...meal, cuisineStyle: "home", cuisineLabel: cuisineCopy.home.label };
@@ -753,14 +778,89 @@ function createSafeFallbackMeal(slot, index, preferences) {
   };
 }
 
+function getCandidateMealsForSlot(slot, preferences, members = state.members) {
+  const slotKey = getSlotKey(slot);
+  const allDietMeals = Object.entries(mealBank).flatMap(([dietKey, meals]) =>
+    meals
+      .filter((meal) => getSlotKey(meal.slot) === slotKey)
+      .map((meal) => ({
+        ...meal,
+        sourceDiet: dietKey,
+        cuisineStyle: "home",
+        cuisineLabel: cuisineCopy.home.label,
+        keepCuisine: preferences.pantryMode === "empty" || (preferences.pantryMode === "use" && !state.pantry.length),
+      })),
+  );
+  const styles = preferences.cuisineStyle === "rotation" ? ["chinese", "japanese", "korean", "thai", "mediterranean", "western"] : [preferences.cuisineStyle || "home"];
+  const cuisineMeals = styles
+    .map((style) => cuisineMealBank[style]?.[slotKey] && { ...cuisineMealBank[style][slotKey], slot, sourceDiet: preferences.diet, cuisineStyle: style, cuisineLabel: cuisineCopy[style]?.label, keepCuisine: true })
+    .filter(Boolean);
+  const pantryMeal = createPantryDrivenMeal(slot, preferences);
+  const focusPool = preferences.diet === "balanced" && hasFocus("bloodSugar", members) ? mealBank.lowCarb : mealBank[preferences.diet] || mealBank.balanced;
+  const focusMeals = focusPool
+    .filter((meal) => getSlotKey(meal.slot) === slotKey)
+    .map((meal) => ({ ...meal, sourceDiet: preferences.diet, cuisineStyle: "home", cuisineLabel: cuisineCopy.home.label }));
+  return [...(pantryMeal ? [pantryMeal] : []), ...cuisineMeals, ...focusMeals, ...allDietMeals].filter((meal) => !mealHasRestrictedTerm(meal, preferences));
+}
+
+function createPantryDrivenMeal(slot, preferences) {
+  if (preferences.pantryMode !== "use" || !state.pantry.length) return null;
+  const safeItems = state.pantry.filter((item) => !isRestrictedIngredient(item.name, preferences));
+  const protein = safeItems.find((item) => item.category === "蛋白質");
+  const staple = safeItems.find((item) => item.category === "主食與全穀");
+  const vegetables = safeItems.filter((item) => item.category === "蔬果").slice(0, 2);
+  const extras = safeItems.filter((item) => item.category === "好油脂與配料").slice(0, 1);
+  if (!protein || !vegetables.length) return null;
+  const ingredients = [protein.name, staple?.name, ...vegetables.map((item) => item.name), ...extras.map((item) => item.name)].filter(Boolean);
+  return {
+    slot,
+    title: `${slot}庫存快手餐`,
+    detail: `優先使用家中已有的 ${ingredients.slice(0, 4).join("、")}，不足的主食或蔬菜再少量補買。`,
+    ingredients,
+    tags: ["庫存優先", "減少採買"],
+    bg: mealBank.balanced.find((meal) => getSlotKey(meal.slot) === getSlotKey(slot))?.bg || "",
+    sourceDiet: preferences.diet,
+    cuisineStyle: preferences.cuisineStyle,
+    cuisineLabel: cuisineCopy[preferences.cuisineStyle]?.label || cuisineCopy.home.label,
+    keepCuisine: true,
+  };
+}
+
+function scoreMealCandidate(meal, slot, index, preferences, seed) {
+  if (preferences.pantryMode === "empty") {
+    const repeatedStaples = (meal.ingredients.join(" ").match(/雞胸肉|鮭魚|糙米|花椰菜/g) || []).length;
+    return (stableHash(`${seed}-${slot}-${index}-${meal.title}`) % 100) - repeatedStaples * 18;
+  }
+  let score = 0;
+  if (meal.sourceDiet === preferences.diet) score += 8;
+  if (meal.cuisineStyle && meal.cuisineStyle === getCuisineStyleForMeal(preferences, index)) score += 10;
+  if (meal.tags?.includes("庫存優先")) score += 18;
+  if (shouldUsePantry(preferences) && state.pantry.length) {
+    meal.ingredients.forEach((ingredient) => {
+      if (findPantryMatch(ingredient)) score += 18;
+      else if (findPantrySubstitute(ingredient)) score += 7;
+    });
+  } else {
+    score += stableHash(`${seed}-${slot}-${index}-${meal.title}`) % 17;
+    if (/雞胸肉|鮭魚|糙米|花椰菜/.test(meal.ingredients.join(" "))) score -= preferences.pantryMode === "empty" ? 5 : 2;
+  }
+  if (preferences.weeklyVariety === "light" && /湯|蔬菜|清爽|少油/.test(`${meal.title}${meal.detail}${meal.tags?.join("")}`)) score += 4;
+  if (preferences.weeklyVariety === "budget" && shouldUsePantry(preferences)) score += meal.ingredients.filter((ingredient) => findPantryMatch(ingredient) || findPantrySubstitute(ingredient)).length * 3;
+  return score;
+}
+
+function pickMealForSlot(slot, index, preferences, members) {
+  const candidates = getCandidateMealsForSlot(slot, preferences, members);
+  if (!candidates.length) return createSafeFallbackMeal(slot, index, preferences);
+  const seed = getMenuSeed(preferences);
+  return [...candidates].sort((a, b) => scoreMealCandidate(b, slot, index, preferences, seed) - scoreMealCandidate(a, slot, index, preferences, seed))[0];
+}
+
 function getMeals(preferences, totals, members = state.members) {
-  const preferredBank = preferences.diet === "balanced" && hasFocus("bloodSugar", members) ? mealBank.lowCarb : mealBank[preferences.diet];
-  const source = preferredBank.filter((meal) => !mealHasRestrictedTerm(meal, preferences));
-  const fallback = mealBank.balanced;
   const slots = getMealSlots(preferences.meals);
   const distribution = getMealDistribution(preferences.meals);
   const selected = slots
-    .map((slot, index) => source.find((meal) => meal.slot === slot) || fallback.find((meal) => meal.slot === slot && !mealHasRestrictedTerm(meal, preferences)) || createSafeFallbackMeal(slot, index, preferences))
+    .map((slot, index) => pickMealForSlot(slot, index, preferences, members))
     .filter(Boolean)
     .slice(0, distribution.length);
 
@@ -811,8 +911,8 @@ function getPlanDays(planMode) {
 function buildShoppingItems(meals, days, units) {
   const ingredients = [...new Set(meals.flatMap((meal) => meal.ingredients))].filter((name) => !isAllergyIngredient(name));
   return ingredients.map((name) => {
-    const pantryMatch = state.preferences.pantryMode === "ignore" ? null : findPantryMatch(name);
-    const substitute = state.preferences.pantryMode === "ignore" || pantryMatch ? null : findPantrySubstitute(name);
+    const pantryMatch = shouldUsePantry() ? findPantryMatch(name) : null;
+    const substitute = shouldUsePantry() && !pantryMatch ? findPantrySubstitute(name) : null;
     const referenceOnly = state.preferences.pantryMode === "reference" && pantryMatch;
     return {
       name,
@@ -953,12 +1053,12 @@ function renderPantry(meals) {
   const needed = [...new Set(meals.flatMap((meal) => meal.ingredients))];
   const suggestions = getManagementSuggestions(needed);
   const gapItems = needed.map((name) => {
-    const match = state.preferences.pantryMode === "ignore" ? null : findPantryMatch(name);
-    const substitute = state.preferences.pantryMode === "ignore" || match ? null : findPantrySubstitute(name);
+    const match = shouldUsePantry() ? findPantryMatch(name) : null;
+    const substitute = shouldUsePantry() && !match ? findPantrySubstitute(name) : null;
     return {
       name,
       status: match ? "already-owned" : substitute ? "can-substitute" : "need-buy",
-      note: match ? (state.preferences.pantryMode === "reference" ? `家中有 ${match.name}，可選用但不強制消耗` : `家中已有：${match.name} ${match.quantity}`) : substitute ? `可先用 ${substitute.name} 替代` : "建議列入採買",
+      note: match ? (state.preferences.pantryMode === "reference" ? `家中有 ${match.name}，可選用但不強制消耗` : `家中已有：${match.name} ${match.quantity}`) : substitute ? `可先用 ${substitute.name} 替代` : state.preferences.pantryMode === "empty" ? "無庫存模式下作為菜單輪替參考" : "建議列入採買",
     };
   });
 
@@ -1013,12 +1113,21 @@ function renderPantry(meals) {
 }
 
 function getManagementSuggestions(needed) {
-  const missing = needed.filter((name) => state.preferences.pantryMode === "ignore" || !findPantryMatch(name));
+  const missing = needed.filter((name) => !shouldUsePantry() || !findPantryMatch(name));
   const suggestions = [
     {
       type: "already-owned",
       title: "先用庫存",
-      detail: state.preferences.pantryMode === "ignore" ? "本次暫不考慮庫存，會重新設計菜單與採買。" : state.preferences.pantryMode === "reference" ? `目前有 ${state.pantry.length} 筆庫存，只作參考不強制消耗。` : state.pantry.length ? `目前有 ${state.pantry.length} 筆庫存，菜單會優先抵扣相同或同類食材。` : "先建立冰箱與乾貨庫存，採買建議會更精準。",
+      detail:
+        state.preferences.pantryMode === "empty"
+          ? "目前採無庫存模式，菜單會主動輪替，不把空庫存誤當成固定採買清單。"
+          : state.preferences.pantryMode === "ignore"
+            ? "本次暫不考慮庫存，會重新設計菜單與採買。"
+            : state.preferences.pantryMode === "reference"
+              ? `目前有 ${state.pantry.length} 筆庫存，只作參考不強制消耗。`
+              : state.pantry.length
+                ? `目前有 ${state.pantry.length} 筆庫存，菜單會優先抵扣相同或同類食材。`
+                : "先建立冰箱與乾貨庫存，採買建議會更精準。",
     },
     {
       type: "need-buy",
@@ -1072,7 +1181,7 @@ function getPantryCoverage(meals) {
   const substitutes = [];
   const missing = [];
   mealIngredients.forEach((ingredient) => {
-    if (state.preferences.pantryMode === "ignore") {
+    if (!shouldUsePantry()) {
       missing.push(ingredient);
       return;
     }
@@ -1096,7 +1205,14 @@ function renderPantrySyncSummary(meals, label = "今日菜單") {
   const ownedText = coverage.owned.length ? coverage.owned.slice(0, 6).join("、") : "尚未抵扣到相同庫存";
   const substituteText = coverage.substitutes.length ? coverage.substitutes.slice(0, 4).join("、") : "暫無同類替代";
   const missingText = coverage.missing.length ? coverage.missing.slice(0, 6).join("、") : "目前菜單缺口很少";
-  const pantryActionText = state.preferences.pantryMode === "ignore" ? "本次不套用庫存抵扣。" : state.preferences.pantryMode === "reference" ? "庫存只作參考，不強制消耗。" : "採買清單會自動抵扣或建議替代。";
+  const pantryActionText =
+    state.preferences.pantryMode === "empty"
+      ? "無庫存模式會主動輪替菜色，不固定補同一批食材。"
+      : state.preferences.pantryMode === "ignore"
+        ? "本次不套用庫存抵扣。"
+        : state.preferences.pantryMode === "reference"
+          ? "庫存只作參考，不強制消耗。"
+          : "採買清單會自動抵扣或建議替代。";
   return `
     <section class="sync-panel">
       <div>
@@ -1316,8 +1432,10 @@ function buildWeeklyPlan(calculations) {
     const lunchAtHome = lunchMembers.length > 0;
     const dinnerUnits = sumServingUnits(dinnerMembers);
     const lunchUnits = lunchAtHome ? sumServingUnits(lunchMembers) : 0;
-    const rawLunchMeal = { ...weeklyMealPool.lunch[index % weeklyMealPool.lunch.length], slot: "午餐", bg: "" };
-    const rawDinnerMeal = { ...weeklyMealPool.dinner[index % weeklyMealPool.dinner.length], slot: "晚餐", bg: "" };
+    const lunchOffset = shouldUsePantry() && state.pantry.length ? 0 : getMenuSeed(state.preferences) % weeklyMealPool.lunch.length;
+    const dinnerOffset = shouldUsePantry() && state.pantry.length ? 0 : getMenuSeed(state.preferences) % weeklyMealPool.dinner.length;
+    const rawLunchMeal = lunchAtHome && state.preferences.pantryMode === "use" && state.pantry.length ? pickMealForSlot("午餐", index, state.preferences, calculations.planning.members) : { ...weeklyMealPool.lunch[(index + lunchOffset) % weeklyMealPool.lunch.length], slot: "午餐", bg: "" };
+    const rawDinnerMeal = state.preferences.pantryMode === "use" && state.pantry.length ? pickMealForSlot("晚餐", index + 1, state.preferences, calculations.planning.members) : { ...weeklyMealPool.dinner[(index + dinnerOffset) % weeklyMealPool.dinner.length], slot: "晚餐", bg: "" };
     const styledLunch = mealHasRestrictedTerm(rawLunchMeal, state.preferences) ? createSafeFallbackMeal("午餐", index, state.preferences) : applyCuisineStyle(rawLunchMeal, state.preferences, index);
     const styledDinner = mealHasRestrictedTerm(rawDinnerMeal, state.preferences) ? createSafeFallbackMeal("晚餐", index, state.preferences) : applyCuisineStyle(rawDinnerMeal, state.preferences, index + 1);
     const lunchMeal = mealHasRestrictedTerm(styledLunch, state.preferences) ? createSafeFallbackMeal("午餐", index, state.preferences) : styledLunch;
@@ -1716,6 +1834,8 @@ function renderAiBridge(calculations, meals) {
         <div class="button-row">
           <button class="primary-button" type="button" id="copyPromptButton">複製給 ChatGPT</button>
           <button class="secondary-button" type="button" id="downloadSnapshotButton">匯出 JSON</button>
+          <label class="secondary-button file-button" for="snapshotImportInput">匯入 JSON</label>
+          <input class="visually-hidden-file" id="snapshotImportInput" type="file" accept=".json,application/json" />
         </div>
         <textarea id="chatGptPrompt" rows="14" readonly>${escapeTextarea(prompt)}</textarea>
         <details class="data-preview">
@@ -1759,7 +1879,18 @@ function buildShareSnapshot(calculations, meals) {
   const days = getPlanDays(state.preferences.planMode);
   const weeklyPlan = buildWeeklyPlan(calculations);
   return {
+    appName: "家庭健康飲食指南",
+    appVersion: APP_VERSION,
+    updatedAt: APP_UPDATED_AT,
     createdAt: new Date().toLocaleString("zh-TW"),
+    storagePolicy: "資料只儲存在此瀏覽器 localStorage；匯出 JSON 只有在使用者手動下載或分享時才會離開裝置。",
+    appState: {
+      members: state.members,
+      preferences: state.preferences,
+      pantry: state.pantry,
+      diary: state.diary,
+      aiAdvice: state.aiAdvice,
+    },
     preferences: state.preferences,
     mealPattern: getMealPatternLabel(state.preferences.meals),
     planning: {
@@ -1924,10 +2055,19 @@ function updatePreferencesFromForm() {
   state.preferences = readPreferencesFromForm();
 }
 
+function saveAppState() {
+  saveLocalData(MEMBER_STORAGE_KEY, state.members);
+  saveLocalData(PREFERENCES_STORAGE_KEY, state.preferences);
+  saveLocalData(PANTRY_STORAGE_KEY, state.pantry);
+  saveLocalData("familyDietDiary", state.diary);
+  saveLocalData("familyDietAiAdvice", state.aiAdvice);
+}
+
 function updateApp(event) {
   event?.preventDefault();
   syncActiveMemberFromForm();
   updatePreferencesFromForm();
+  saveAppState();
   const calculations = familyCalculations();
   const meals = getMeals(state.preferences, calculations.totals, calculations.planning.members);
   renderMemberList();
@@ -1951,7 +2091,7 @@ function resetAll() {
   state.preferences = { ...defaultPreferences };
   state.pantry = createDefaultPantry();
   state.importHistory = ["已重設預設家庭資料，庫存目前為空"];
-  saveLocalData(PANTRY_STORAGE_KEY, state.pantry);
+  saveAppState();
   pantryText.value = "";
   scaleImportStatus.textContent = "已重設，可重新匯入成員資料與家中食材";
   photoPreview.classList.remove("active");
@@ -2230,6 +2370,39 @@ function downloadCurrentSnapshot() {
   scaleImportStatus.textContent = "已匯出可上傳 ChatGPT 的 JSON";
 }
 
+function importSnapshotData(snapshot) {
+  const appState = snapshot.appState || snapshot;
+  if (Array.isArray(appState.members) && appState.members.length) {
+    state.members = appState.members.map((member, index) => ({ ...createDefaultMembers()[index % createDefaultMembers().length], ...member, id: member.id || `member-${Date.now()}-${index}` }));
+    state.activeMemberId = state.members[0].id;
+  }
+  if (appState.preferences) state.preferences = { ...defaultPreferences, ...appState.preferences };
+  if (Array.isArray(appState.pantry)) state.pantry = appState.pantry;
+  if (Array.isArray(appState.diary)) state.diary = appState.diary;
+  else if (Array.isArray(snapshot.diaryRecent)) state.diary = snapshot.diaryRecent;
+  if (Array.isArray(appState.aiAdvice)) state.aiAdvice = appState.aiAdvice;
+  else if (Array.isArray(snapshot.aiAdviceRecent)) state.aiAdvice = snapshot.aiAdviceRecent;
+  state.importHistory.unshift(`已匯入 ${snapshot.appName || "家庭飲食"} JSON 快照`);
+  writeMemberToForm(activeMember());
+  writePreferencesToForm();
+  saveAppState();
+  updateApp();
+  setActiveView("ai");
+}
+
+function importSnapshotFile(file) {
+  if (!file) return;
+  readTextFile(file, (text) => {
+    try {
+      const snapshot = JSON.parse(text);
+      importSnapshotData(snapshot);
+      scaleImportStatus.textContent = `已匯入 ${file.name}，資料只保存於此瀏覽器`;
+    } catch {
+      scaleImportStatus.textContent = "JSON 匯入失敗，請確認檔案是本 app 匯出的資料快照";
+    }
+  });
+}
+
 memberList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-member-id]");
   if (!button) return;
@@ -2267,6 +2440,10 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("#clearAiAdviceButton")) clearAiAdvice();
 });
 
+document.addEventListener("change", (event) => {
+  if (event.target.closest("#snapshotImportInput")) importSnapshotFile(event.target.files[0]);
+});
+
 writeMemberToForm(activeMember());
 writePreferencesToForm();
 updateApp();
@@ -2274,5 +2451,6 @@ updateApp();
 window.familyDietApp = {
   parseScaleText,
   parsePantryText,
+  importSnapshotData,
   state,
 };
