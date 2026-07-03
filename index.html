@@ -281,6 +281,7 @@
               <span>庫存使用策略</span>
               <select id="pantryMode" name="pantryMode">
                 <option value="use" selected>優先消耗家中食材</option>
+                <option value="empty">無庫存模式，菜單主動輪替</option>
                 <option value="reference">只參考庫存，不強制消耗</option>
                 <option value="ignore">暫不考慮庫存，重新設計菜單</option>
               </select>
@@ -368,8 +369,16 @@
           <div class="view" id="aiView"></div>
         </section>
       </section>
+
+      <footer class="app-footer">
+        <div>
+          <b>家庭健康飲食指南 v1.0</b>
+          <span>更新日期：2026-07-03</span>
+        </div>
+        <p>本工具僅供家庭飲食規劃參考，不作為醫療、營養治療或診斷依據。孕期、慢性病、特殊飲食需求或醫囑限制者，請諮詢專業醫師或營養師。</p>
+      </footer>
     </main>
 
-    <script src="app.js?v=20260703-three-block-cuisine-allergy-4"></script>
+    <script src="app.js?v=20260703-privacy-pantry-v1"></script>
   </body>
 </html>
