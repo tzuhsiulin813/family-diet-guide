@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>家庭健康飲食指南</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">家庭健康飲食指南</p>
+          <h1>全家人的健康菜單與採買規劃</h1>
+        </div>
+        <div class="health-note">估算結果僅供日常飲食規劃參考；孕期、慢性病、飲食疾患或醫囑限制請先諮詢專業人員。</div>
+      </header>
+
+      <section class="workspace" aria-label="菜單設計工具">
+        <form class="profile-panel" id="profileForm">
+          <div class="panel-heading">
+            <h2>家庭成員資料</h2>
+            <button class="icon-action" type="button" id="resetButton" title="重設表單" aria-label="重設表單">
+              ↺
+            </button>
+          </div>
+
+          <div class="member-strip" id="memberList" aria-label="家庭成員"></div>
+          <button class="secondary-button" type="button" id="addMemberButton">新增家庭成員</button>
+
+          <section class="workflow-section">
+            <div class="workflow-kicker">區塊一</div>
+            <h3>家庭身體質量與營養需求</h3>
+            <p>先建立成員資料，後續食譜與採買會依照本次備餐對象計算。</p>
+          </section>
+
+          <fieldset class="segmented">
+            <legend>本次備餐對象</legend>
+            <label><input type="radio" name="planAudience" value="family" checked />全家</label>
+            <label><input type="radio" name="planAudience" value="active" />目前成員</label>
+            <label><input type="radio" name="planAudience" value="mom" />媽媽</label>
+            <label><input type="radio" name="planAudience" value="adults" />大人</label>
+            <label><input type="radio" name="planAudience" value="kids" />孩子</label>
+          </fieldset>
+
+          <div class="field-grid">
+            <label>
+              <span>姓名</span>
+              <input id="name" name="name" type="text" value="家人 A" autocomplete="name" />
+            </label>
+
+            <label>
+              <span>性別</span>
+              <select id="sex" name="sex">
+                <option value="female">女性</option>
+                <option value="male">男性</option>
+              </select>
+            </label>
+
+            <label>
+              <span>家庭角色</span>
+              <select id="role" name="role">
+                <option value="adult">成人</option>
+                <option value="senior">銀髮族</option>
+                <option value="teen">青少年</option>
+                <option value="child">兒童</option>
+              </select>
+            </label>
+
+            <label>
+              <span>年齡，可留空</span>
+              <input id="age" name="age" type="number" min="1" max="100" value="35" />
+            </label>
+
+            <label>
+              <span>身高 cm，可留空</span>
+              <input id="height" name="height" type="number" min="80" max="230" value="165" />
+            </label>
+
+            <label>
+              <span>體重 kg，可留空</span>
+              <input id="weight" name="weight" type="number" min="5" max="220" step="0.1" value="62" />
+            </label>
+
+            <label>
+              <span>活動量</span>
+              <select id="activity" name="activity">
+                <option value="1.2">久坐</option>
+                <option value="1.375" selected>每週輕量運動 1-3 天</option>
+                <option value="1.55">每週中等運動 3-5 天</option>
+                <option value="1.725">高活動量</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="subsection-title">智慧體重機資料</div>
+
+          <div class="field-grid">
+            <label>
+              <span>體脂肪 %，可留空</span>
+              <input id="bodyFat" name="bodyFat" type="number" min="3" max="60" step="0.1" placeholder="例：28.5" />
+            </label>
+
+            <label>
+              <span>肌肉量 kg，可留空</span>
+              <input id="muscleMass" name="muscleMass" type="number" min="10" max="100" step="0.1" placeholder="例：38.2" />
+            </label>
+
+            <label>
+              <span>骨量 kg，可留空</span>
+              <input id="boneMass" name="boneMass" type="number" min="1" max="8" step="0.1" placeholder="例：2.5" />
+            </label>
+
+            <label>
+              <span>內臟脂肪等級，可留空</span>
+              <input id="visceralFat" name="visceralFat" type="number" min="1" max="30" step="1" placeholder="例：8" />
+            </label>
+
+            <label>
+              <span>身體水分 %，可留空</span>
+              <input id="bodyWater" name="bodyWater" type="number" min="30" max="75" step="0.1" placeholder="例：52" />
+            </label>
+
+            <label>
+              <span>腰圍 cm，可留空</span>
+              <input id="waist" name="waist" type="number" min="40" max="180" step="0.1" placeholder="例：78" />
+            </label>
+          </div>
+
+          <section class="smart-panel" aria-label="智慧匯入">
+            <div class="subsection-title">智慧匯入</div>
+            <div class="import-grid">
+              <label class="file-drop">
+                <span>上傳體重機資料</span>
+                <input id="scaleFileInput" type="file" accept=".json,.csv,.txt,text/*,application/json" />
+                <small>支援 JSON / CSV / TXT，會套用到目前選取成員</small>
+              </label>
+
+              <label class="file-drop">
+                <span>拍攝或上傳現有食材</span>
+                <input id="ingredientPhotoInput" type="file" accept="image/*" capture="environment" />
+                <small>照片會先預覽，再搭配文字或語音建立庫存</small>
+              </label>
+            </div>
+            <div class="import-status" id="scaleImportStatus">尚未匯入資料</div>
+            <div class="photo-preview" id="photoPreview" aria-live="polite"></div>
+          </section>
+
+          <fieldset class="segmented">
+            <legend>目標</legend>
+            <label><input type="radio" name="goal" value="lose" checked />減脂</label>
+            <label><input type="radio" name="goal" value="maintain" />維持</label>
+            <label><input type="radio" name="goal" value="gain" />增肌</label>
+          </fieldset>
+
+          <div class="field-grid compact">
+            <label>
+              <span>健康重點</span>
+              <select id="healthFocus" name="healthFocus">
+                <option value="general">一般均衡</option>
+                <option value="bloodSugar">血糖穩定</option>
+                <option value="cholesterol">膽固醇管理</option>
+                <option value="bone">骨質照護</option>
+                <option value="childFriendly">孩童友善</option>
+              </select>
+            </label>
+
+            <label>
+              <span>飲食型態</span>
+              <select id="diet" name="diet">
+                <option value="balanced">均衡</option>
+                <option value="highProtein">高蛋白</option>
+                <option value="vegetarian">蛋奶素</option>
+                <option value="lowCarb">低醣</option>
+              </select>
+            </label>
+
+            <label>
+              <span>料理風格</span>
+              <select id="cuisineStyle" name="cuisineStyle">
+                <option value="home" selected>家常混搭</option>
+                <option value="chinese">中式家常</option>
+                <option value="japanese">日式清爽</option>
+                <option value="korean">韓式風味</option>
+                <option value="thai">泰式酸香</option>
+                <option value="mediterranean">地中海輕食</option>
+                <option value="western">西式簡餐</option>
+                <option value="rotation">本週輪流換風格</option>
+              </select>
+            </label>
+
+            <label>
+              <span>餐次 / 進食窗口</span>
+              <select id="meals" name="meals">
+                <option value="2" selected>168 兩餐</option>
+                <option value="1">一日一餐 OMAD</option>
+                <option value="3">三餐</option>
+                <option value="4">三餐 + 點心</option>
+              </select>
+            </label>
+
+            <label>
+              <span>料理時間</span>
+              <select id="cookTime" name="cookTime">
+                <option value="quick">20 分鐘內</option>
+                <option value="standard" selected>30 分鐘內</option>
+                <option value="prep">可備餐</option>
+              </select>
+            </label>
+
+            <label>
+              <span>避免食材</span>
+              <input id="avoid" name="avoid" type="text" placeholder="例：花生、牛奶、海鮮" />
+            </label>
+
+            <label>
+              <span>嚴重過敏原，硬性排除</span>
+              <input id="allergyList" name="allergyList" type="text" placeholder="例：花生、堅果、蝦、牛奶、蛋" />
+            </label>
+          </div>
+
+          <section class="workflow-section">
+            <div class="workflow-kicker">區塊二</div>
+            <h3>食譜與烹飪方法</h3>
+            <p>選擇料理風格、餐次、過敏原與是否使用家中食材，產出可快速料理的菜單。</p>
+          </section>
+
+          <section class="smart-panel" aria-label="家庭用餐情境">
+            <div class="subsection-title">家庭用餐情境</div>
+            <div class="field-grid compact">
+              <label>
+                <span>孩子平日午餐</span>
+                <select id="childLunchMode" name="childLunchMode">
+                  <option value="school" selected>上學日多在學校用餐</option>
+                  <option value="home">平日也多在家用餐</option>
+                </select>
+              </label>
+
+              <label>
+                <span>目前週期</span>
+                <select id="seasonMode" name="seasonMode">
+                  <option value="school" selected>一般上學週</option>
+                  <option value="vacation">寒暑假 / 長假</option>
+                  <option value="holiday">例假日週</option>
+                </select>
+              </label>
+
+              <label>
+                <span>先生晚餐</span>
+                <select id="husbandDinnerMode" name="husbandDinnerMode">
+                  <option value="variable" selected>輪班，有時不在家</option>
+                  <option value="home">多半在家吃</option>
+                  <option value="away">多半不在家吃</option>
+                </select>
+              </label>
+
+              <label>
+                <span>晚餐處理方式</span>
+                <select id="dinnerPrepMode" name="dinnerPrepMode">
+                  <option value="reheat" selected>媽媽需要能快速熱菜</option>
+                  <option value="fresh">可現煮</option>
+                  <option value="mixed">部分現煮、部分備菜</option>
+                </select>
+              </label>
+
+              <label>
+                <span>週菜單風格</span>
+                <select id="weeklyVariety" name="weeklyVariety">
+                  <option value="varied" selected>想打破一成不變</option>
+                  <option value="comfort">孩子接受度優先</option>
+                  <option value="light">清爽少負擔</option>
+                  <option value="budget">預算與庫存優先</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section class="smart-panel" aria-label="家中現有食材">
+            <div class="subsection-title">家中現有食材</div>
+            <label>
+              <span>庫存使用策略</span>
+              <select id="pantryMode" name="pantryMode">
+                <option value="use" selected>優先消耗家中食材</option>
+                <option value="reference">只參考庫存，不強制消耗</option>
+                <option value="ignore">暫不考慮庫存，重新設計菜單</option>
+              </select>
+            </label>
+            <label>
+              <span>文字或語音輸入</span>
+              <textarea id="pantryText" rows="4" placeholder="例：雞蛋 6 顆、花椰菜 1 顆、鮭魚 2 片、糙米半包"></textarea>
+            </label>
+            <div class="button-row">
+              <button class="secondary-button" type="button" id="voiceButton">語音輸入</button>
+              <button class="secondary-button" type="button" id="addPantryButton">加入庫存</button>
+            </div>
+          </section>
+
+          <section class="workflow-section">
+            <div class="workflow-kicker">區塊三</div>
+            <h3>採買與補貨計畫</h3>
+            <p>依產出的食譜與常用通路，整理需要買、可替代與不建議多買的食材。</p>
+          </section>
+
+          <fieldset class="check-grid">
+            <legend>常用通路</legend>
+            <label><input type="checkbox" name="stores" value="pxmart" checked />全聯</label>
+            <label><input type="checkbox" name="stores" value="costco" checked />好市多</label>
+            <label><input type="checkbox" name="stores" value="leezen" checked />里仁</label>
+            <label><input type="checkbox" name="stores" value="foodpanda" />foodpanda</label>
+            <label><input type="checkbox" name="stores" value="ubereats" />Uber Eats</label>
+          </fieldset>
+
+          <fieldset class="segmented">
+            <legend>採買計畫</legend>
+            <label><input type="radio" name="planMode" value="today" checked />當天</label>
+            <label><input type="radio" name="planMode" value="week" />一週</label>
+            <label><input type="radio" name="planMode" value="random" />隨機</label>
+          </fieldset>
+
+          <button class="primary-button" type="submit">更新家庭菜單與採買</button>
+        </form>
+
+        <section class="results-panel" aria-live="polite">
+          <div class="flow-strip" aria-label="三大流程">
+            <article>
+              <b>1 身體與營養</b>
+              <span>讀取家庭成員身體質量，估算每日營養需求。</span>
+            </article>
+            <article>
+              <b>2 食譜與烹飪</b>
+              <span>依料理風格、過敏原與庫存策略產生菜單。</span>
+            </article>
+            <article>
+              <b>3 採買與補貨</b>
+              <span>依食譜整理增購、替代與通路連結。</span>
+            </article>
+          </div>
+
+          <div class="hero-plate" aria-hidden="true">
+            <div class="plate">
+              <span class="grain"></span>
+              <span class="protein"></span>
+              <span class="greens"></span>
+              <span class="fruit"></span>
+            </div>
+          </div>
+
+          <div class="summary-row" id="summaryRow"></div>
+
+          <div class="tabs" role="tablist" aria-label="結果檢視">
+            <button class="tab" type="button" data-view="family" role="tab" aria-selected="false">家庭</button>
+            <button class="tab" type="button" data-view="pantry" role="tab" aria-selected="false">庫存</button>
+            <button class="tab active" type="button" data-view="menu" role="tab" aria-selected="true">菜單</button>
+            <button class="tab" type="button" data-view="week" role="tab" aria-selected="false">週菜單</button>
+            <button class="tab" type="button" data-view="nutrition" role="tab" aria-selected="false">營養</button>
+            <button class="tab" type="button" data-view="shopping" role="tab" aria-selected="false">採買</button>
+            <button class="tab" type="button" data-view="diary" role="tab" aria-selected="false">日誌</button>
+            <button class="tab" type="button" data-view="ai" role="tab" aria-selected="false">AI 協作</button>
+          </div>
+
+          <div class="view" id="familyView"></div>
+          <div class="view" id="pantryView"></div>
+          <div class="view active" id="menuView"></div>
+          <div class="view" id="weekView"></div>
+          <div class="view" id="nutritionView"></div>
+          <div class="view" id="shoppingView"></div>
+          <div class="view" id="diaryView"></div>
+          <div class="view" id="aiView"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js?v=20260703-three-block-cuisine-allergy-4"></script>
+  </body>
+</html>
