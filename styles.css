@@ -82,6 +82,31 @@ h1 {
   line-height: 1.55;
 }
 
+.app-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 680px);
+  gap: 20px;
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding: 18px 0 4px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.app-footer div {
+  display: grid;
+  gap: 4px;
+}
+
+.app-footer b {
+  color: var(--ink);
+}
+
+.app-footer p {
+  margin-bottom: 0;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: 450px minmax(0, 1fr);
@@ -272,6 +297,21 @@ textarea {
 
 .secondary-button:hover {
   background: var(--mint);
+}
+
+.file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+}
+
+.visually-hidden-file {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .member-strip {
@@ -1258,6 +1298,7 @@ textarea {
 
 @media (max-width: 980px) {
   .topbar,
+  .app-footer,
   .workspace,
   .flow-strip,
   .nutrition-layout,
